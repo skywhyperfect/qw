@@ -15,6 +15,8 @@ from sklearn.metrics import classification_report, roc_auc_score
 import warnings
 import argparse
 import os
+import shap
+import joblib
 
 warnings.filterwarnings('ignore')
 
@@ -115,7 +117,7 @@ def engineer_features(df: pd.DataFrame) -> tuple[pd.DataFrame, list]:
     ]
 
     print(f"✅ Feature engineering завершён. Признаков: {len(feature_cols)}")
-    return df, feature_cols
+    return df, feature_cols, encoders  # <-- добавили encoders
 
 
 # ============================================================
@@ -247,6 +249,14 @@ def explain_decision(row: pd.Series, model, feature_cols: list, feature_values: 
 
     return "Ключевые факторы: " + " | ".join(explanation)
 
+# ============================================================
+# 7.1 EXPLAINABILITY С SHAP (Добавлено для Этапа 2)
+# ============================================================
+def get_shap_explanations(model, X_test):
+    """Генерация SHAP-значений для веб-интерфейса"""
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X_test)
+    return explainer, shap_values
 
 # ============================================================
 # MAIN
@@ -258,7 +268,7 @@ def main(data_path: str, output_path: str = 'outputs/scoring_results.csv'):
     # Пайплайн
     df = load_data(data_path)
     df = create_target(df)
-    df, feature_cols = engineer_features(df)
+    df, feature_cols, encoders = engineer_features(df)
     model, X_test, y_test, idx_test = train_model(df, feature_cols)
     y_proba, auc = evaluate_model(model, X_test, y_test, feature_cols)
     df_scored = generate_scoring(df, idx_test, y_proba)
@@ -279,6 +289,13 @@ def main(data_path: str, output_path: str = 'outputs/scoring_results.csv'):
     print(f"   Всего оценено заявок: {len(df_scored):,}")
     print("\n⚠️  Финальное решение остаётся за комиссией.")
     print("="*60)
+
+    os.makedirs('models', exist_ok=True)
+    joblib.dump(model, 'models/agro_model.pkl')
+    joblib.dump(encoders, 'models/encoders.pkl')
+    joblib.dump(feature_cols, 'models/feature_cols.pkl')
+    print("💾 Артефакты модели сохранены в папку /models/")
+    # <---
 
     return df_scored, model
 
